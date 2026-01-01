@@ -14,6 +14,40 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+
+# --- SECURITY: PASSWORD CHECK ---
+def check_password():
+    """Returns `True` if the user had the correct password."""
+
+    def password_entered():
+        """Checks whether a password entered by the user is correct."""
+        if st.session_state["password"] == st.secrets.get("PASSWORD", "7@2362"):  # Default is 1234
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # Don't store the password
+        else:
+            st.session_state["password_correct"] = False
+
+    if "password_correct" not in st.session_state:
+        # First run, show input for password.
+        st.text_input(
+            "Enter Password", type="password", on_change=password_entered, key="password"
+        )
+        st.info("Default Password: 1234")
+        return False
+    elif not st.session_state["password_correct"]:
+        # Password not correct, show input + error.
+        st.text_input(
+            "Enter Password", type="password", on_change=password_entered, key="password"
+        )
+        st.error("😕 Password incorrect")
+        return False
+    else:
+        # Password correct.
+        return True
+
+if not check_password():
+    st.stop()
+
 # --- PREMIUM STYLING (GLASSMORPHISM + NEON) ---
 st.markdown("""
     <style>
