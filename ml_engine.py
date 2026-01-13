@@ -34,10 +34,11 @@ def prepare_features(df):
     df['Vol_Ratio'] = df['Volume'] / df['Volume'].rolling(20).mean()
     
     # Target Construction (The "Answer")
-    # We want to predict if price goes UP by 0.5% in next 4 candles (1 hour)
+    # We want to predict if price goes UP by 0.1% in next 1 candle (15 mins)
     # 1 = Buy Signal, 0 = Hold/Sell
-    future_returns = df['Close'].shift(-4) / df['Close'] - 1
-    df['Target'] = (future_returns > 0.005).astype(int) 
+    # [UPDATED] Shift -1 (Next Candle) instead of -4
+    future_returns = df['Close'].shift(-1) / df['Close'] - 1
+    df['Target'] = (future_returns > 0.001).astype(int) 
     
     # Clean NaNs
     df.dropna(inplace=True)
@@ -69,7 +70,8 @@ def train_and_predict(df, ticker):
         # Actually, for target generation, we lose the last 4 rows (Target is NaN).
         # So we train on 0 to N-5.
         
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
+        # [UPDATED] 75% Train, 25% Test
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, shuffle=False)
         
         # Model
         clf = RandomForestClassifier(n_estimators=100, max_depth=5, random_state=42)

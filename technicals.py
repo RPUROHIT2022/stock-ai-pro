@@ -59,6 +59,25 @@ def calculate_stoch_rsi(df, period=14, smoothK=3, smoothD=3):
     d = k.rolling(smoothD).mean()
     return k, d
 
+def calculate_atr(df, period=14):
+    """
+    Calculates Average True Range (ATR) for volatility-based targets.
+    """
+    high = df['High']
+    low = df['Low']
+    close = df['Close']
+    
+    # TR1: High - Low
+    tr1 = high - low
+    # TR2: |High - PrevClose|
+    tr2 = abs(high - close.shift(1))
+    # TR3: |Low - PrevClose|
+    tr3 = abs(low - close.shift(1))
+    
+    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    atr = tr.ewm(span=period, adjust=False).mean()
+    return atr.fillna(0)
+
 def calculate_supertrend(df, period=10, multiplier=3.0):
     # Returns the SuperTrend Line and a 'Direction' column (1=Up, -1=Down)
     high = df['High']
@@ -136,6 +155,9 @@ def detect_structure(df):
     
     # BB Squeeze (Band Width)
     df['BB_Width'] = (df['BB_Upper'] - df['BB_Lower']) / df['EMA_20']
+    
+    # ATR (Avg True Range) - For Targets
+    df['ATR'] = calculate_atr(df, 14)
     
     return df
 
