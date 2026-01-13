@@ -18,32 +18,34 @@ st.set_page_config(
 # --- SECURITY: PASSWORD CHECK ---
 def check_password():
     """Returns `True` if the user had the correct password."""
-
-    def password_entered():
-        """Checks whether a password entered by the user is correct."""
-        if st.session_state["password"] == st.secrets.get("PASSWORD", "7@2362"):  # Default is 1234
-            st.session_state["password_correct"] = True
-            del st.session_state["password"]  # Don't store the password
-        else:
-            st.session_state["password_correct"] = False
-
+    
     if "password_correct" not in st.session_state:
-        # First run, show input for password.
-        st.text_input(
-            "Enter Password", type="password", on_change=password_entered, key="password"
-        )
-        st.info("Default Password: 1234")
-        return False
-    elif not st.session_state["password_correct"]:
-        # Password not correct, show input + error.
-        st.text_input(
-            "Enter Password", type="password", on_change=password_entered, key="password"
-        )
-        st.error("😕 Password incorrect")
-        return False
-    else:
-        # Password correct.
+        st.session_state.password_correct = False
+        
+    if st.session_state.password_correct:
         return True
+        
+    # Show input for password
+    st.text_input(
+        "Enter Password", type="password", key="password_input"
+    )
+    
+    if st.button("Log In"):
+        # Check against secrets or fallback
+        # Valid secrets locations: .streamlit/secrets.toml OR Streamlit Cloud Secrets
+        try:
+            stored_password = st.secrets["general"]["PASSWORD"]
+        except:
+            # Fallback if secrets keys structure varies
+            stored_password = st.secrets.get("PASSWORD", "982911")
+            
+        if st.session_state["password_input"] == str(stored_password):
+            st.session_state.password_correct = True
+            st.rerun()
+        else:
+            st.error("😕 Password incorrect")
+            
+    return False
 
 if not check_password():
     st.stop()
@@ -157,11 +159,13 @@ if 'watchlist' not in st.session_state:
     # UPDATED DEFAULT WATCHLIST with TATASTEEL
     st.session_state.watchlist = ["RELIANCE.NS", "HDFCBANK.NS", "INFY.NS", "TATASTEEL.NS"] 
 
+
 # --- SIDEBAR ---
 with st.sidebar:
     st.markdown("### 🎮 Control Center")
+    # [UPDATED] Added "High Probability" as DEFAULT (Index 0)
     mode = st.radio("Select Mode", 
-        ["Live Watchlist Monitor", "Deep Analysis (Single Stock)", "Dashboard & News", "Full Nifty 500 Scan"],
+        ["🔥 High Conviction Opportunities", "Commodities AI Sniper", "Live Watchlist Monitor", "Deep Analysis (Single Stock)", "Dashboard & News", "Full Nifty 500 Scan", "Institutional Alpha Dashboard"],
         label_visibility="collapsed"
     )
     
@@ -197,6 +201,32 @@ with st.sidebar:
                 st.success(f"Added {info_count} stocks!")
                 st.rerun()
 
+    # 3. Quick Add: Commodities / F&O
+    with st.expander("Add Commodities / F&O"):
+        fno_options = {
+            "Select Instrument...": "",
+            "Crude Oil (CL=F)": "CL=F",
+            "Gold (GC=F)": "GC=F",
+            "Silver (SI=F)": "SI=F",
+            "Crude Oil Mini (QM=F)": "QM=F",
+            "Gold Mini (QO=F)": "QO=F",
+            "Silver Mini (QI=F)": "QI=F",
+            "Natural Gas (NG=F)": "NG=F",
+            "Copper (HG=F)": "HG=F"
+        }
+        
+        selected_fno = st.selectbox("Choose Instrument", list(fno_options.keys()), label_visibility="collapsed")
+        
+        if st.button("Add Instrument", use_container_width=True):
+            ticker_to_add = fno_options[selected_fno]
+            if ticker_to_add:
+                if ticker_to_add not in st.session_state.watchlist:
+                    st.session_state.watchlist.append(ticker_to_add)
+                    st.success(f"Added {selected_fno}")
+                    st.rerun()
+                else:
+                    st.toast("⚠️ Already in watchlist")
+
     # 3. Remove
     to_remove = st.selectbox("Remove Stock", ["Select to Remove..."] + st.session_state.watchlist)
     if to_remove != "Select to Remove...":
@@ -220,12 +250,70 @@ def render_metric_card(label, value, delta=None, color=None):
     </div>
     """, unsafe_allow_html=True)
 
+# --- MODE 0: HIGH PROBABILITY (AUTO FINDER) ---
+if mode == "🔥 High Conviction Opportunities":
+    st.markdown("### 🔥 High Probability Opportunities (>75%)")
+    st.markdown("This mode automatically scans the market for **high-confidence** setups.")
+    
+    # Auto-run logic: We run scan immediately
+    # Ideally, we cache this or run it once.
+    if st.button("⚡ Scan Market Now", type="primary"):
+        with st.spinner("Scanning Nifty 500 for High Conviction Setups (Max 59d History)..."):
+            res = scan_stocks()
+            
+            # Filter for Score > 75 [UPDATED]
+            high_prob_stocks = [s for s in res['ALL_TRADES'] if s['AI_Score'] >= 75]
+            
+            if high_prob_stocks:
+                st.success(f"Found {len(high_prob_stocks)} Elite Opportunities!")
+                
+                # Render as Cards
+                for stock in high_prob_stocks:
+                    with st.container():
+                        # Determine Color
+                        card_color = "rgba(0, 230, 118, 0.1)" if stock['Signal'] == "BUY" else "rgba(255, 23, 68, 0.1)"
+                        border_col = "#00e676" if stock['Signal'] == "BUY" else "#ff1744"
+                        
+                        st.markdown(f"""
+                        <div class="glass-card" style="border-left: 5px solid {border_col}; background: {card_color};">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <h3 style="margin:0;">{stock['Stock']} <span style="font-size: 0.6em; color: {border_col};">{stock['Signal']}</span></h3>
+                                    <p style="color: #bbb; margin:0;">Strategy: {stock['Strategy']}</p>
+                                </div>
+                                <div style="text-align: right;">
+                                    <div style="font-size: 2rem; font-weight: bold; color: {border_col};">{stock['AI_Score']}%</div>
+                                    <div style="font-size: 0.7rem; opacity: 0.8;">CONFIDENCE</div>
+                                </div>
+                            </div>
+                            <hr style="border-color: rgba(255,255,255,0.1);">
+                            <div style="display: flex; gap: 15px;">
+                                <div>CMP: <b>₹{stock['CMP']}</b></div>
+                                <div>Target: <b style="color: #00e676;">₹{stock['Target 1']}</b></div>
+                                <div>Stop: <b style="color: #ff1744;">₹{stock['Stop Loss']}</b></div>
+                                <div>RSI: <b>{stock['Stats']['RSI']}</b></div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+            else:
+                st.warning("No stocks found with > 75% Confidence right now. Try again later or lower criteria.")
+    else:
+        st.info("Click 'Scan Market Now' to hunt for opportunities.")
+
 # --- MODE 1: LIVE WATCHLIST ---
 if mode == "Live Watchlist Monitor":
+
     st.markdown("### 🔴 Live Portfolio Monitor")
     
-    col_act, _ = st.columns([2, 8])
+    col_act, col_ref, _ = st.columns([2, 3, 5])
     if col_act.button("🔄 Refresh Data", type="primary"): 
+        st.rerun()
+        
+    with col_ref:
+        auto_ref = st.checkbox("⚡ Auto-Refresh (30s)", value=False)
+        
+    if auto_ref:
+        time.sleep(30)
         st.rerun()
     
     live_data = []
@@ -457,4 +545,64 @@ elif mode == "Full Nifty 500 Scan":
                 st.dataframe(pd.DataFrame(res['ALL_TRADES']))
             else:
                 st.warning("No clear setups found right now.")
+
+# --- MODE 5: INSTITUTIONAL DASHBOARD ---
+elif mode == "Institutional Alpha Dashboard":
+    from institutional_dashboard import render_institutional_dashboard
+    render_institutional_dashboard()
+
+# --- MODE 6: COMMODITIES AI SNIPER ---
+elif mode == "Commodities AI Sniper":
+    st.markdown("## 🛢️ Commodities AI Sniper")
+    st.markdown("Train Hybrid AI (LSTM + XGBoost) on Global Commodities for 1-2 Hr Predictons.")
+    
+    col1, col2 = st.columns([1, 2])
+    
+    with col1:
+        st.markdown("### 🎯 Instrument Selector")
+        
+        comm_options = {
+            "Crude Oil Mini (QM=F)": "QM=F",
+            "Gold Mini (QO=F)": "QO=F",
+            "Silver Mini (QI=F)": "QI=F",
+            "Crude Oil (CL=F)": "CL=F",
+            "Gold (GC=F)": "GC=F",
+            "Silver (SI=F)": "SI=F",
+            "Natural Gas (NG=F)": "NG=F",
+            "Copper (HG=F)": "HG=F"
+        }
+        
+        selected_comm_name = st.selectbox("Select Asset", list(comm_options.keys()))
+        selected_ticker = comm_options[selected_comm_name]
+        
+        st.info(f"Targeting: **{selected_ticker}**")
+        
+        if st.button("🚀 Run AI Analysis", type="primary", use_container_width=True):
+             with st.spinner(f"Training AI Models on {selected_ticker}..."):
+                from institutional_dashboard import get_institutional_analysis
+                data = get_institutional_analysis(selected_ticker)
+                
+                if data:
+                    st.session_state['comm_data'] = data
+                    st.session_state['comm_ticker'] = selected_ticker
+                    st.success("AI Training Complete!")
+                    st.rerun()
+
+    with col2:
+        if 'comm_data' in st.session_state:
+            from institutional_dashboard import display_institutional_results
+            st.markdown(f"### 📊 Analysis Results: {st.session_state.get('comm_ticker', '')}")
+            
+            # Re-use the high-end dashboard display
+            # API Key usually comes from sidebar input in other tab, let's grab it if available or show input
+            api_key = st.text_input("Gemini API Key (Optional)", type="password", help="For Text Verdict")
+            
+            display_institutional_results(st.session_state['comm_data'], api_key, st.session_state.get('comm_ticker', ''))
+        else:
+            st.markdown("""
+            <div style="text-align: center; padding: 50px; opacity: 0.5;">
+                <h1>🦅</h1>
+                <p>Select an Instrument and Click Run to Initialize AI.</p>
+            </div>
+            """, unsafe_allow_html=True)
 
